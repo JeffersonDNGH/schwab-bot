@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Schwab Options Bot — Live Dashboard</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: #0d1117;
+      color: #c9d1d9;
+      padding: 20px;
+    }
+    h1 { color: #58a6ff; margin-bottom: 5px; }
+    h2 { color: #8b949e; font-size: 1.1em; margin: 15px 0 8px; }
+    .header { border-bottom: 1px solid #30363d; padding-bottom: 15px; margin-bottom: 20px; }
+    .status-bar {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      background: #161b22;
+      padding: 15px;
+      border-radius: 6px;
+      margin-bottom: 20px;
+    }
+    .stat-box { flex: 1; min-width: 150px; }
+    .stat-label { color: #8b949e; font-size: 0.85em; margin-bottom: 3px; }
+    .stat-value { font-size: 1.4em; font-weight: 600; color: #58a6ff; }
+    .badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 0.85em;
+      font-weight: 500;
+    }
+    .badge-paper { background: #388bfd; color: #fff; }
+    .badge-live { background: #3fb950; color: #fff; }
+    .badge-killed { background: #f85149; color: #fff; }
+    .controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    button {
+      background: #21262d;
+      color: #c9d1d9;
+      border: 1px solid #30363d;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.9em;
+    }
+    button:hover { background: #30363d; }
+    button.danger { background: #f85149; color: #fff; border: none; }
+    button.danger:hover { background: #da3633; }
+    button.success { background: #3fb950; color: #fff; border: none; }
+    button.success:hover { background: #2ea043; }
+    .feed {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      max-height: 600px;
+      overflow-y: auto;
+      padding: 15px;
+    }
+    .event {
+      padding: 10px;
+      border-left: 3px solid #30363d;
+      margin-bottom: 10px;
+      background: #0d1117;
+    }
+    .event-type-cycle_start { border-left-color: #58a6ff; }
+    .event-type-signal_trade { border-left-color: #3fb950; }
+    .event-type-order_placed { border-left-color: #3fb950; font-weight: 600; }
+    .event-type-order_skipped { border-left-color: #f0883e; }
+    .event-type-risk_blocked { border-left-color: #f85149; }
+    .event-type-kill_switch { border-left-color: #f85149; font-weight: 600; }
+    .event-ts { color: #8b949e; font-size: 0.8em; }
+    .event-type { font-weight: 600; color: #58a6ff; }
+    .event-symbol { color: #3fb950; font-weight: 600; }
+    .event-reasons { color: #8b949e; font-size: 0.9em; margin-top: 5px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { text-align: left; padding: 8px; border-bottom: 1px solid #30363d; }
+    th { color: #8b949e; font-weight: 500; }
+    .pulse { animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+    /* ── Bot Brain panel ── */
+    .brain-panel {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 16px 20px;
+      margin-bottom: 20px;
+    }
+    .brain-panel h2 {
+      color: #58a6ff;
+      font-size: 1.05em;
+      margin: 0 0 14px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .brain-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 14px 24px;
+      margin-bottom: 14px;
+    }
+    .brain-item { display: flex; flex-direction: column; gap: 3px; }
+    .brain-label {
+      color: #8b949e;
+      font-size: 0.75em;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .brain-value {
+      font-size: 1em;
+      font-weight: 600;
+      color: #c9d1d9;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    /* Mode badges — larger than status bar */
+    .brain-mode-paper {
+      background: #388bfd;
+      color: #fff;
+      padding: 3px 10px;
+      border-radius: 4px;
+      font-size: 0.9em;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+    .brain-mode-live {
+      background: #3fb950;
+      color: #fff;
+      padding: 3px 10px;
+      border-radius: 4px;
+      font-size: 0.9em;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+    /* Market status pill */
+    .mkt-pill {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 20px;
+      font-size: 0.85em;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+    }
+    .mkt-open  { background: #1a4731; color: #3fb950; border: 1px solid #3fb950; }
+    .mkt-closed { background: #3d1a1a; color: #f85149; border: 1px solid #f85149; }
+    /* State dot colours */
+    .state-dot { font-size: 1.1em; }
+    /* Reasoning log */
+    .brain-reasoning {
+      background: #0d1117;
+      border: 1px solid #21262d;
+      border-radius: 4px;
+      padding: 10px 14px;
+      font-size: 0.85em;
+      color: #8b949e;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      min-height: 38px;
+    }
+    .brain-reasoning span { display: block; }
+    /* Watchlist row */
+    .brain-watchlist {
+      margin-top: 10px;
+      font-size: 0.82em;
+      color: #8b949e;
+    }
+    .brain-watchlist strong { color: #c9d1d9; }
+    /* Countdown timer */
+    #brain-cycle-countdown, #brain-event-countdown {
+      font-variant-numeric: tabular-nums;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Schwab Options Bot — Live Dashboard</h1>
+    <p style="color: #8b949e; margin-top: 5px;">Premium Harvesting · IRA Safe · Full Transparency</p>
+  </div>
+
+  <!-- ── Top stats bar (unchanged) ── -->
+  <div class="status-bar">
+    <div class="stat-box">
+      <div class="stat-label">Mode</div>
+      <div class="stat-value" id="mode-badge"><span class="badge badge-paper pulse">Loading...</span></div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Kill Switch</div>
+      <div class="stat-value" id="kill-status">—</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Uptime</div>
+      <div class="stat-value" id="uptime">—</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Cycles Run</div>
+      <div class="stat-value" id="cycles">—</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Orders Placed</div>
+      <div class="stat-value" id="orders-placed">—</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Premium Collected</div>
+      <div class="stat-value" id="premium">—</div>
+    </div>
+  </div>
+
+  <!-- ── Bot Brain panel (NEW — inserted here) ── -->
+  <div class="brain-panel">
+    <h2>🧠 Bot Brain</h2>
+    <div class="brain-grid">
+
+      <div class="brain-item">
+        <div class="brain-label">Mode</div>
+        <div class="brain-value" id="brain-mode"><span class="brain-mode-paper pulse">Loading…</span></div>
+      </div>
+
+      <div class="brain-item">
+        <div class="brain-label">Strategy</div>
+        <div class="brain-value" id="brain-strategy" style="color:#58a6ff;">—</div>
+      </div>
+
+      <div class="brain-item">
+        <div class="brain-label">Current State</div>
+        <div class="brain-value" id="brain-state">—</div>
+      </div>
+
+      <div class="brain-item">
+        <div class="brain-label">Market Status</div>
+        <div class="brain-value" id="brain-market">—</div>
+      </div>
+
+      <div class="brain-item">
+        <div class="brain-label">Time Until Next Event</div>
+        <div class="brain-value" id="brain-event-countdown">—</div>
+      </div>
+
+      <div class="brain-item">
+        <div class="brain-label">Next Cycle In</div>
+        <div class="brain-value" id="brain-cycle-countdown">—</div>
+      </div>
+
+    </div>
+
+    <!-- Reasoning log -->
+    <div class="brain-label" style="margin-bottom:6px;">Last Cycle Reasoning</div>
+    <div class="brain-reasoning" id="brain-reasoning">
+      <span style="color:#444;">Waiting for first cycle…</span>
+    </div>
+
+    <!-- Watchlist & params -->
+    <div class="brain-watchlist" id="brain-watchlist">
+      Watchlist: — &nbsp;·&nbsp; Min premium: — &nbsp;·&nbsp; Max open: —
+    </div>
+  </div>
+
+  <!-- ── Controls (unchanged) ── -->
+  <div class="controls">
+    <button onclick="toggleKillSwitch()" id="kill-btn">Kill Switch</button>
+    <button onclick="refreshStats()">Refresh Stats</button>
+    <button onclick="clearFeed()">Clear Feed</button>
+  </div>
+
+  <!-- ── Live Event Feed (unchanged) ── -->
+  <h2>Live Event Feed <span style="color: #3fb950; font-size: 0.8em;" id="stream-status">● Connected</span></h2>
+  <div class="feed" id="event-feed">
+    <p style="color: #8b949e; text-align: center;">Waiting for events...</p>
+  </div>
+
+  <!-- ── Account Positions (unchanged) ── -->
+  <h2>Account Positions</h2>
+  <div id="positions" style="background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 15px;">
+    <p style="color: #8b949e;">Loading positions...</p>
+  </div>
+
+  <script>
+    let killSwitch = false;
+    let eventSource = null;
+    const maxFeedEvents = 50;
+
+    // ── Brain panel state (live countdowns) ──
+    let _brainSecsEvent = null;   // seconds until market open/close
+    let _brainSecsCycle = null;   // seconds until next cycle
+    let _brainEventLabel = null;  // "open" | "close"
+    let _brainCountdownTimer = null;
+
+    function formatUptime(seconds) {
+      if (!seconds) return '—';
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      return `${h}h ${m}m`;
+    }
+
+    function formatTime(isoTimestamp) {
+      const d = new Date(isoTimestamp);
+      return d.toLocaleTimeString();
+    }
+
+    // ── Format seconds as "Xh Ym" or "Xm Ys" ──
+    function fmtDuration(secs) {
+      if (secs == null || isNaN(secs) || secs < 0) return '—';
+      secs = Math.round(secs);
+      const h = Math.floor(secs / 3600);
+      const m = Math.floor((secs % 3600) / 60);
+      const s = secs % 60;
+      if (h > 0) return `${h}h ${m}m`;
+      if (m > 0) return `${m}m ${s}s`;
+      return `${s}s`;
+    }
+
+    // ── Convert UTC ISO → CDT display string ──
+    function toCDT(isoUtc) {
+      if (!isoUtc) return '—';
+      try {
+        const d = new Date(isoUtc);
+        return d.toLocaleTimeString('en-US', {
+          timeZone: 'America/Chicago',
+          hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
+        }) + ' CDT';
+      } catch (e) { return '—'; }
+    }
+
+    // ── State → display text ──
+    function stateDisplay(action, killActive) {
+      if (killActive) return '<span class="state-dot">⚫</span> Kill switch active';
+      switch (action) {
+        case 'scanning_watchlist':
+        case 'starting_up':
+          return '<span class="state-dot">🟢</span> Scanning watchlist';
+        case 'waiting_next_cycle':
+          return '<span class="state-dot">🟡</span> Waiting for next cycle';
+        case 'market_closed_idling':
+          return '<span class="state-dot">🔴</span> Market closed — idling';
+        case 'risk_blocked':
+          return '<span class="state-dot">🟡</span> Risk guard blocked — waiting';
+        case 'error':
+          return '<span class="state-dot">🔴</span> Error — check logs';
+        default:
+          return `<span class="state-dot">🟡</span> ${action || '—'}`;
+      }
+    }
+
+    // ── Tick down both countdowns every second ──
+    function startCountdownTick() {
+      if (_brainCountdownTimer) clearInterval(_brainCountdownTimer);
+      _brainCountdownTimer = setInterval(() => {
+        if (_brainSecsEvent !== null) {
+          _brainSecsEvent = Math.max(0, _brainSecsEvent - 1);
+          const label = _brainEventLabel === 'open' ? 'Market opens in' : 'Market closes in';
+          document.getElementById('brain-event-countdown').textContent =
+            `${label} ${fmtDuration(_brainSecsEvent)}`;
+        }
+        if (_brainSecsCycle !== null) {
+          _brainSecsCycle = Math.max(0, _brainSecsCycle - 1);
+          document.getElementById('brain-cycle-countdown').textContent =
+            fmtDuration(_brainSecsCycle);
+        }
+      }, 1000);
+    }
+
+    // ── Refresh Bot Brain panel ──
+    async function refreshBrain() {
+      try {
+        const brain = await fetch('/dashboard/api/brain').then(r => r.json());
+
+        // Mode (large badge)
+        const isPaper = (brain.mode || 'paper') === 'paper';
+        document.getElementById('brain-mode').innerHTML = isPaper
+          ? `<span class="brain-mode-paper">PAPER MODE</span>`
+          : `<span class="brain-mode-live">LIVE MODE</span>`;
+
+        // Strategy
+        document.getElementById('brain-strategy').textContent = brain.strategy || '—';
+
+        // Current state
+        document.getElementById('brain-state').innerHTML =
+          stateDisplay(brain.current_action, brain.kill_switch_active);
+
+        // Market status pill
+        const mktOpen = brain.market_open;
+        document.getElementById('brain-market').innerHTML = mktOpen
+          ? '<span class="mkt-pill mkt-open">OPEN</span>'
+          : '<span class="mkt-pill mkt-closed">CLOSED</span>';
+
+        // Seed countdowns (JS ticks them down every second)
+        _brainSecsEvent = brain.seconds_until_next_event;
+        _brainEventLabel = brain.next_event;
+        _brainSecsCycle = brain.secs_until_cycle;
+        startCountdownTick();
+
+        // Immediate first render
+        const evtLabel = _brainEventLabel === 'open' ? 'Market opens in' : 'Market closes in';
+        document.getElementById('brain-event-countdown').textContent =
+          `${evtLabel} ${fmtDuration(_brainSecsEvent)}`;
+        document.getElementById('brain-cycle-countdown').textContent =
+          fmtDuration(_brainSecsCycle);
+
+        // Last reasoning log
+        const lines = brain.last_reasoning || [];
+        if (lines.length) {
+          document.getElementById('brain-reasoning').innerHTML =
+            lines.map(l => `<span>${l}</span>`).join('');
+        } else {
+          document.getElementById('brain-reasoning').innerHTML =
+            '<span style="color:#444;">No reasoning logged yet.</span>';
+        }
+
+        // Watchlist & params
+        const wl = (brain.watchlist || []).join(', ');
+        document.getElementById('brain-watchlist').innerHTML =
+          `<strong>Watchlist:</strong> ${wl || '—'} &nbsp;·&nbsp; ` +
+          `<strong>Min premium:</strong> $${(brain.min_premium || 0).toFixed(2)} &nbsp;·&nbsp; ` +
+          `<strong>Max open:</strong> ${brain.max_open || '—'}`;
+
+      } catch (err) {
+        console.error('refreshBrain error:', err);
+      }
+    }
+
+    async function refreshStats() {
+      try {
+        const [status, stats, account] = await Promise.all([
+          fetch('/dashboard/api/status').then(r => r.json()),
+          fetch('/dashboard/api/stats').then(r => r.json()),
+          fetch('/dashboard/api/account').then(r => r.json()),
+        ]);
+
+        // Update status bar
+        const modeBadge = status.paper_mode 
+          ? '<span class="badge badge-paper">PAPER MODE</span>' 
+          : '<span class="badge badge-live">LIVE</span>';
+        document.getElementById('mode-badge').innerHTML = modeBadge;
+
+        killSwitch = status.kill_switch_active || false;
+        const killBadge = killSwitch
+          ? '<span class="badge badge-killed">ACTIVE</span>'
+          : '<span class="badge badge-success" style="background:#3fb950;">OFF</span>';
+        document.getElementById('kill-status').innerHTML = killBadge;
+        document.getElementById('kill-btn').textContent = killSwitch ? 'Resume Trading' : 'Kill Switch';
+        document.getElementById('kill-btn').className = killSwitch ? 'success' : 'danger';
+
+        document.getElementById('uptime').textContent = formatUptime(status.uptime_seconds);
+        document.getElementById('cycles').textContent = stats.cycles_run || 0;
+        document.getElementById('orders-placed').textContent = stats.orders_placed || 0;
+        document.getElementById('premium').textContent = `$${stats.estimated_premium_collected || 0}`;
+
+        // Update positions
+        const posDiv = document.getElementById('positions');
+        if (account.error) {
+          posDiv.innerHTML = `<p style="color: #f85149;">Error: ${account.error}</p>`;
+        } else {
+          posDiv.innerHTML = `
+            <div style="display:flex; gap:20px; flex-wrap:wrap;">
+              <div><strong>Buying Power:</strong> $${(account.buying_power || 0).toFixed(2)}</div>
+              <div><strong>Equity Positions:</strong> ${account.equity_positions_count || 0}</div>
+              <div><strong>Option Positions:</strong> ${account.option_positions_count || 0}</div>
+            </div>
+          `;
+        }
+      } catch (err) {
+        console.error('refreshStats error:', err);
+      }
+    }
+
+    async function toggleKillSwitch() {
+      const endpoint = killSwitch ? '/dashboard/resume' : '/dashboard/kill';
+      try {
+        const res = await fetch(endpoint, { method: 'POST' });
+        const data = await res.json();
+        alert(data.message);
+        await refreshStats();
+        await refreshBrain();
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    }
+
+    function clearFeed() {
+      document.getElementById('event-feed').innerHTML = '<p style="color: #8b949e; text-align: center;">Feed cleared. Waiting for new events...</p>';
+    }
+
+    function addEvent(evt) {
+      const feed = document.getElementById('event-feed');
+      const first = feed.firstChild;
+      if (first && first.textContent === 'Waiting for events...') {
+        feed.innerHTML = '';
+      }
+
+      const eventEl = document.createElement('div');
+      eventEl.className = `event event-type-${evt.type}`;
+      
+      let html = `
+        <div class="event-ts">${formatTime(evt.ts)}</div>
+        <div><span class="event-type">${evt.type.toUpperCase()}</span> · <span class="event-symbol">${evt.symbol}</span></div>
+      `;
+      if (evt.reasons && evt.reasons.length > 0) {
+        html += `<div class="event-reasons">➜ ${evt.reasons.join(' | ')}</div>`;
+      }
+      if (evt.action && evt.action !== 'none') {
+        html += `<div style="color:#3fb950; margin-top:4px;">→ Action: <strong>${evt.action}</strong></div>`;
+      }
+      if (evt.contract && evt.contract.symbol) {
+        html += `<div style="color:#8b949e; font-size:0.85em; margin-top:4px;">Contract: ${evt.contract.symbol} @ $${evt.contract.bid || '—'}</div>`;
+      }
+      eventEl.innerHTML = html;
+
+      feed.insertBefore(eventEl, feed.firstChild);
+
+      // Keep only last N events
+      const events = feed.querySelectorAll('.event');
+      if (events.length > maxFeedEvents) {
+        for (let i = maxFeedEvents; i < events.length; i++) {
+          events[i].remove();
+        }
+      }
+    }
+
+    function connectSSE() {
+      if (eventSource) {
+        eventSource.close();
+      }
+      eventSource = new EventSource('/dashboard/stream');
+      eventSource.onopen = () => {
+        document.getElementById('stream-status').innerHTML = '● Connected';
+        document.getElementById('stream-status').style.color = '#3fb950';
+      };
+      eventSource.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data.type !== 'heartbeat') {
+            addEvent(data);
+          }
+        } catch (err) {
+          console.error('SSE parse error:', err);
+        }
+      };
+      eventSource.onerror = () => {
+        document.getElementById('stream-status').innerHTML = '○ Reconnecting...';
+        document.getElementById('stream-status').style.color = '#f0883e';
+      };
+    }
+
+    // Initialize
+    refreshStats();
+    refreshBrain();
+    connectSSE();
+    setInterval(refreshStats, 10000);   // Stats every 10s (unchanged)
+    setInterval(refreshBrain, 15000);   // Brain every 15s (re-seeds countdowns)
+  </script>
+</body>
+</html>
